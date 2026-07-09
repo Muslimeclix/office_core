@@ -1,0 +1,24 @@
+name: office_core_example
+description: "Example app demonstrating OfficeCore plugin usage."
+publish_to: 'none'
+version: 1.0.0
+
+environment:
+  sdk: ">=3.4.0 <4.0.0"
+  flutter: ">=3.22.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+  office_core:
+    path: ../
+  firebase_core: ^4.11.0
+  google_mobile_ads: ^9.0.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0
+
+flutter:
+  uses-material-design: true
