@@ -1,10 +1,10 @@
 name: office_core
-description: "A federated Flutter plugin consolidating Remote Config, Ads, Crashlytics, Analytics, Notifications, and Trial/Limits behind a single initialize() entry point with a strongly-typed configuration model."
+description: "A federated Flutter plugin for Remote Config, Ads, Crashlytics, Analytics, Notifications, and Trial/Limits, powered by a single initialize() API."
 version: 1.0.0
-homepage: https://github.com/your-org/office_core
-repository: https://github.com/your-org/office_core
-issue_tracker: https://github.com/your-org/office_core/issues
-documentation: https://github.com/your-org/office_core#readme
+homepage: https://github.com/Muslimeclix/office_core
+repository: https://github.com/Muslimeclix/office_core
+issue_tracker: https://github.com/Muslimeclix/office_core/issues
+documentation: https://github.com/Muslimeclix/office_core#readme
 
 topics:
   - remote-config
