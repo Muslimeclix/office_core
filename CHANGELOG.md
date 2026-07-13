@@ -1,4 +1,14 @@
 
+## 1.1.0
+
+- **Remote Config rewritten to flat, per-platform keys** (e.g. `show_banner_android`, `free_reminder_limit_ios`). No more single `office_config_v1` JSON blob. Consumers can keep their existing RC JSON (parameter groups) unchanged.
+- **Never crashes on no internet.** If Remote Config can't be fetched (offline / Firebase unavailable), the app launches immediately on bundled defaults and keeps running.
+- **Auto-sync on reconnect.** When connectivity is restored, OfficeCore automatically re-fetches Remote Config and emits `OfficeCore.rc.changes` — no extra code needed.
+- **Package defaults fill gaps.** Any RC key not provided by the developer (or provided as `null`/empty string) falls back to the package's built-in defaults. `remoteConfigDefaults` is now a `Map<String, dynamic>?` of per-platform flat overrides.
+- **Generic accessors added**: `OfficeCore.rc.boolValue`, `intValue`, `doubleValue`, `stringValue` resolve the current platform suffix automatically for app-specific keys.
+- **New typed fields**: `platform.freeLimits` (`reminderLimit`, `userLimit`, `-1` = unlimited) and `platform.upgrader` (`showUpgrader`, `showLater`, `showIgnore`).
+- **Ad unit IDs default to Google test IDs** when not set in RC — ads work in development with zero setup.
+
 ## 1.0.1
 
 - **Tool limits now code-defined**: Added required `toolLimits` map to `OfficeCoreConfig`. Tool names come from app code (no more generic `tool1`/`tool2` keys). RC overrides individual limit values.

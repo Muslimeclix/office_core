@@ -27,12 +27,47 @@ class OfficeRemoteConfig {
 
   /// Bundled production default. Used when RC fetch fails or before the first
   /// successful fetch completes.
-  static OfficeRemoteConfig get defaultProduction => const OfficeRemoteConfig(
+  static OfficeRemoteConfig get defaultProduction => OfficeRemoteConfig(
         platform: PlatformConfig.defaultProduction,
       );
 
   @override
   String toString() => 'OfficeRemoteConfig(platform: $platform)';
+}
+
+/// Free-tier limits read from flat RC keys `free_reminder_limit` /
+/// `free_user_limit`. `-1` means unlimited.
+class FreeLimitsConfig {
+  const FreeLimitsConfig({
+    required this.reminderLimit,
+    required this.userLimit,
+  });
+
+  final int reminderLimit;
+  final int userLimit;
+
+  bool get isReminderUnlimited => reminderLimit < 0;
+  bool get isUserUnlimited => userLimit < 0;
+
+  static const FreeLimitsConfig defaultProduction =
+      FreeLimitsConfig(reminderLimit: -1, userLimit: -1);
+}
+
+/// Upgrader dialog controls read from flat RC keys `show_upgrader`,
+/// `show_upgrade_later`, `show_upgrade_ignore`.
+class UpgraderConfig {
+  const UpgraderConfig({
+    required this.showUpgrader,
+    required this.showLater,
+    required this.showIgnore,
+  });
+
+  final bool showUpgrader;
+  final bool showLater;
+  final bool showIgnore;
+
+  static const UpgraderConfig defaultProduction =
+      UpgraderConfig(showUpgrader: false, showLater: false, showIgnore: false);
 }
 
 /// Top-level platform configuration container.
@@ -45,6 +80,8 @@ class PlatformConfig {
   final PaywallConfig paywall;
   final AiConfig ai;
   final ProBannerConfig proBanner;
+  final FreeLimitsConfig freeLimits;
+  final UpgraderConfig upgrader;
 
   const PlatformConfig({
     required this.ads,
@@ -55,6 +92,8 @@ class PlatformConfig {
     required this.paywall,
     required this.ai,
     required this.proBanner,
+    required this.freeLimits,
+    required this.upgrader,
   });
 
   factory PlatformConfig.fromJson(Map<String, dynamic> json) {
@@ -76,6 +115,8 @@ class PlatformConfig {
       ai: AiConfig.fromJson(json['ai'] as Map<String, dynamic>? ?? const {}),
       proBanner: ProBannerConfig.fromJson(
           json['pro_banner'] as Map<String, dynamic>? ?? const {}),
+      freeLimits: FreeLimitsConfig.defaultProduction,
+      upgrader: UpgraderConfig.defaultProduction,
     );
   }
 
@@ -90,16 +131,225 @@ class PlatformConfig {
         'pro_banner': proBanner.toJson(),
       };
 
-  static const PlatformConfig defaultProduction = PlatformConfig(
-    ads: AdsConfig.defaultProduction,
-    splash: SplashConfig.defaultProduction,
-    resultScreen: ResultScreenConfig.defaultProduction,
-    global: GlobalConfig.defaultProduction,
-    limits: LimitsConfig.defaultProduction,
-    paywall: PaywallConfig.defaultProduction,
-    ai: AiConfig.defaultProduction,
-    proBanner: ProBannerConfig.defaultProduction,
-  );
+  /// Builds a [PlatformConfig] from a *resolved* (platform-suffix stripped)
+  /// flat map of Remote Config values.
+  ///
+  /// Flat key naming:
+  /// - User keys (match the office RC JSON): `show_ads`, `show_banner`,
+  ///   `show_native`, `show_interstitial`, `show_open_app`,
+  ///   `free_reminder_limit`, `free_user_limit`, `show_upgrader`,
+  ///   `show_upgrade_later`, `show_upgrade_ignore`, `delay_paywall`.
+  /// - Package-internal keys are prefixed `oc_` (e.g. `oc_limits_global_conversion`,
+  ///   `oc_ai_enabled`, `oc_tool_limit_<toolId>`).
+  ///
+  /// [codeToolLimits] are the app-defined baseline tool limits; any
+  /// `oc_tool_limit_<toolId>` entry in [r] overrides them.
+  factory PlatformConfig.fromFlat(
+    Map<String, dynamic> r, {
+    Map<String, int> codeToolLimits = const {},
+  }) {
+    final toolLimits = <String, int>{...codeToolLimits};
+    for (final entry in r.entries) {
+      if (entry.key.startsWith('oc_tool_limit_')) {
+        final toolId = entry.key.substring('oc_tool_limit_'.length);
+        toolLimits[toolId] = (entry.value as num? ?? 0).toInt();
+      }
+    }
+
+    return PlatformConfig(
+      ads: AdsConfig(
+        enabled: r['show_ads'] as bool? ?? false,
+        visibility: AdsVisibility(
+          banner: r['show_banner'] as bool? ?? false,
+          native: r['show_native'] as bool? ?? false,
+          interstitial: r['show_interstitial'] as bool? ?? false,
+          nativeBanner: r['oc_ads_visibility_native_banner'] as bool? ?? false,
+          appOpen: r['show_open_app'] as bool? ?? false,
+          rewarded: r['oc_ads_visibility_rewarded'] as bool? ?? false,
+        ),
+        units: AdsUnits(
+          appId: r['oc_ads_unit_app_id'] as String? ??
+              'ca-app-pub-3940256099942544~3347511713',
+          banner: r['oc_ads_unit_banner'] as String? ??
+              'ca-app-pub-3940256099942544/6300978111',
+          interstitial: r['oc_ads_unit_interstitial'] as String? ??
+              'ca-app-pub-3940256099942544/1033173712',
+          native: r['oc_ads_unit_native'] as String? ??
+              'ca-app-pub-3940256099942544/2247696110',
+          appOpen: r['oc_ads_unit_app_open'] as String? ??
+              'ca-app-pub-3940256099942544/9257395921',
+          rewarded: r['oc_ads_unit_rewarded'] as String? ??
+              'ca-app-pub-3940256099942544/5224354917',
+        ),
+      ),
+      splash: SplashConfig(
+        showPaywallAfterSplash: r['oc_splash_show_paywall'] as bool? ?? false,
+        giveFullyPremium: r['oc_splash_give_premium'] as bool? ?? false,
+        showOnboardings: r['oc_splash_on_boardings'] as bool? ?? false,
+        showAdAfterSplash: r['oc_splash_ad_after'] as bool? ?? false,
+        onboarding: OnboardingConfig(
+          subscription: SubscriptionConfig(
+            required: r['oc_splash_sub_required'] as bool? ?? false,
+            selectedPlanProductId:
+                r['oc_splash_sub_product_id'] as String? ?? '',
+            revenuecatIndex: (r['oc_splash_sub_index'] as num? ?? 0).toInt(),
+            selectedPlanType: r['oc_splash_sub_type'] as String? ?? 'weekly',
+            trial: TrialConfig(
+              enabled: r['oc_splash_sub_trial_enabled'] as bool? ?? false,
+              durationDays:
+                  (r['oc_splash_sub_trial_days'] as num? ?? 0).toInt(),
+            ),
+          ),
+          showPaywallAfterOnboarding:
+              r['oc_splash_paywall_after_onboarding'] as bool? ?? false,
+          buttonText: r['oc_splash_button_text'] as String? ?? 'Continue',
+        ),
+      ),
+      resultScreen: ResultScreenConfig(
+        showDiscountPopupOnBack:
+            r['oc_result_discount_on_back'] as bool? ?? false,
+        discountPopup: DiscountPopupConfig(
+          trial: TrialConfig(
+            enabled: r['oc_result_trial_enabled'] as bool? ?? false,
+            durationDays: (r['oc_result_trial_days'] as num? ?? 0).toInt(),
+          ),
+          plan: PlanRef(
+            revenuecatIndex: (r['oc_result_plan_index'] as num? ?? 0).toInt(),
+            productId: r['oc_result_plan_product_id'] as String? ?? '',
+            type: r['oc_result_plan_type'] as String? ?? 'weekly',
+          ),
+          buttonText: r['oc_result_button_text'] as String? ?? 'Start Free Trial',
+        ),
+      ),
+      global: GlobalConfig(
+        lockDownload: r['oc_lock_download'] as bool? ?? false,
+        lockShare: r['oc_lock_share'] as bool? ?? false,
+        lockCopy: r['oc_lock_copy'] as bool? ?? false,
+      ),
+      limits: LimitsConfig(
+        globalConversion: (r['oc_limits_global_conversion'] as num? ?? 5).toInt(),
+        otherToolsLimits: toolLimits,
+        fileSize: FileSizeLimit(
+          free: (r['oc_limits_file_size_free'] as num? ?? 5.0).toDouble(),
+          premium: (r['oc_limits_file_size_premium'] as num? ?? 20.0).toDouble(),
+        ),
+        batch: BatchLimit(
+          isLocked: r['oc_limits_batch_locked'] as bool? ?? false,
+          limits: BatchLimits(
+            free: (r['oc_limits_batch_free'] as num? ?? 5).toInt(),
+            premium: (r['oc_limits_batch_premium'] as num? ?? 20).toInt(),
+          ),
+        ),
+      ),
+      paywall: PaywallConfig(
+        plans: const [],
+        ui: PaywallUi(
+          buttonText: r['oc_paywall_button_text'] as String? ?? 'Continue',
+          showBackDiscountPopup:
+              r['oc_paywall_show_back_discount'] as bool? ?? false,
+        ),
+        crossOrContinueFree:
+            r['oc_paywall_cross_or_continue'] as String? ?? 'cross',
+        delaySeconds: (r['delay_paywall'] as num? ?? 0).toInt(),
+      ),
+      ai: AiConfig(
+        enabled: r['oc_ai_enabled'] as bool? ?? false,
+        provider: AiProvider(
+          model: r['oc_ai_model'] as String? ?? '',
+          prompt: r['oc_ai_prompt'] as String? ?? '',
+        ),
+        defaultProvider: r['oc_ai_provider'] as String? ?? 'gemini',
+      ),
+      proBanner: ProBannerConfig(
+        showProBanner: r['oc_pro_banner_show'] as bool? ?? false,
+        trigger: PlanRef(
+          revenuecatIndex: (r['oc_pro_banner_index'] as num? ?? 0).toInt(),
+          productId: r['oc_pro_banner_product_id'] as String? ?? '',
+          type: r['oc_pro_banner_type'] as String? ?? 'weekly',
+        ),
+        showForFirstime: r['oc_pro_banner_firstime'] as bool? ?? false,
+      ),
+      freeLimits: FreeLimitsConfig(
+        reminderLimit: (r['free_reminder_limit'] as num? ?? -1).toInt(),
+        userLimit: (r['free_user_limit'] as num? ?? -1).toInt(),
+      ),
+      upgrader: UpgraderConfig(
+        showUpgrader: r['show_upgrader'] as bool? ?? false,
+        showLater: r['show_upgrade_later'] as bool? ?? false,
+        showIgnore: r['show_upgrade_ignore'] as bool? ?? false,
+      ),
+    );
+  }
+
+  /// Resolved (platform-suffix-stripped) flat defaults for every supported
+  /// key. Each key is expanded to `<key>_android`, `<key>_ios`,
+  /// `<key>_macos` by the service before calling `setDefaults`.
+  static const Map<String, dynamic> defaultFlat = {
+    // User keys (match the office RC JSON exactly)
+    'show_ads': false,
+    'show_banner': false,
+    'show_native': false,
+    'show_interstitial': false,
+    'show_open_app': false,
+    'free_reminder_limit': -1,
+    'free_user_limit': -1,
+    'show_upgrader': false,
+    'show_upgrade_later': false,
+    'show_upgrade_ignore': false,
+    'delay_paywall': 0,
+    // Package-internal keys (prefixed oc_)
+    'oc_ads_visibility_native_banner': false,
+    'oc_ads_visibility_rewarded': false,
+    'oc_ads_unit_app_id': 'ca-app-pub-3940256099942544~3347511713',
+    'oc_ads_unit_banner': 'ca-app-pub-3940256099942544/6300978111',
+    'oc_ads_unit_interstitial': 'ca-app-pub-3940256099942544/1033173712',
+    'oc_ads_unit_native': 'ca-app-pub-3940256099942544/2247696110',
+    'oc_ads_unit_app_open': 'ca-app-pub-3940256099942544/9257395921',
+    'oc_ads_unit_rewarded': 'ca-app-pub-3940256099942544/5224354917',
+    'oc_limits_global_conversion': 5,
+    'oc_limits_file_size_free': 5.0,
+    'oc_limits_file_size_premium': 20.0,
+    'oc_limits_batch_locked': false,
+    'oc_limits_batch_free': 5,
+    'oc_limits_batch_premium': 20,
+    'oc_lock_download': false,
+    'oc_lock_share': false,
+    'oc_lock_copy': false,
+    'oc_ai_enabled': false,
+    'oc_ai_model': '',
+    'oc_ai_prompt': '',
+    'oc_ai_provider': 'gemini',
+    'oc_pro_banner_show': false,
+    'oc_pro_banner_firstime': false,
+    'oc_pro_banner_index': 0,
+    'oc_pro_banner_product_id': '',
+    'oc_pro_banner_type': 'weekly',
+    'oc_splash_show_paywall': false,
+    'oc_splash_give_premium': false,
+    'oc_splash_on_boardings': false,
+    'oc_splash_ad_after': false,
+    'oc_splash_paywall_after_onboarding': false,
+    'oc_splash_button_text': 'Continue',
+    'oc_splash_sub_required': false,
+    'oc_splash_sub_product_id': '',
+    'oc_splash_sub_index': 0,
+    'oc_splash_sub_type': 'weekly',
+    'oc_splash_sub_trial_enabled': false,
+    'oc_splash_sub_trial_days': 0,
+    'oc_result_discount_on_back': false,
+    'oc_result_trial_enabled': false,
+    'oc_result_trial_days': 0,
+    'oc_result_plan_index': 0,
+    'oc_result_plan_product_id': '',
+    'oc_result_plan_type': 'weekly',
+    'oc_result_button_text': 'Start Free Trial',
+    'oc_paywall_button_text': 'Continue',
+    'oc_paywall_show_back_discount': false,
+    'oc_paywall_cross_or_continue': 'cross',
+  };
+
+  static final PlatformConfig defaultProduction =
+      PlatformConfig.fromFlat(defaultFlat);
 }
 
 // ═══════════════════════════════════════════════════════════════════════════

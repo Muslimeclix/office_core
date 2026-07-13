@@ -287,109 +287,110 @@ Future<void> main() async {
 
 ### 3. Remote Config Setup — Where to Put Ad Unit IDs
 
-This is the **most important step**. All your ad unit IDs, visibility flags, and feature toggles live in ONE Firebase Remote Config parameter as a JSON document.
+OfficeCore reads Remote Config from **flat, per-platform keys** (one key per value, suffixed with the platform: `_android`, `_ios`, `_macos`). This is more robust than a single JSON blob — and crucially, **if there is no internet, the app keeps running on bundled defaults and auto-syncs the moment a connection returns.** No crash, ever.
+
+You can organize these keys into **parameter groups** (e.g. `ADS`, `FREE_LIMITS`, `UPGRADER`, `PAYWALL`) in the Firebase console — they're just regular parameters.
 
 #### Step 3.1: Open Remote Config in Firebase console
 
 Firebase console → your project → **Remote Config** (left sidebar) → **Create your first parameter**.
 
-#### Step 3.2: Create the parameter
+#### Step 3.2: Create parameters (flat, per-platform)
 
-- **Parameter name (key):** `office_config_v1` ← must be exactly this
-- **Data type:** String
-- **Default value:** Paste the full JSON below (we'll customize it next)
+Create one parameter per value, per platform. Example — for the `ADS` group:
 
-#### Step 3.3: Paste this JSON template and customize it
+| Parameter key | Type | Default (android) | Default (ios) | Default (macos) |
+|---------------|------|-------------------|---------------|-----------------|
+| `show_ads_android` | Boolean | `true` | — | — |
+| `show_ads_ios` | Boolean | — | `true` | — |
+| `show_ads_macos` | Boolean | — | — | `false` |
+| `show_banner_android` | Boolean | `true` | — | — |
+| `show_banner_ios` | Boolean | — | `true` | — |
+| `show_banner_macos` | Boolean | — | — | `false` |
+| `show_native_android` | Boolean | `true` | — | — |
+| `show_interstitial_android` | Boolean | `true` | — | — |
+| `show_open_app_android` | Boolean | `true` | — | — |
 
-Replace the empty strings with your actual ad unit IDs from AdMob:
+> Tip: You don't have to create the `_macos` keys unless you ship macOS. OfficeCore falls back to its package defaults for any missing key.
+
+#### Step 3.3: Minimal example — the office RC JSON
+
+This is a complete, ready-to-import Remote Config structure (parameter groups + parameters). You can paste it into your Firebase project — OfficeCore works with it out of the box:
 
 ```json
 {
-  "platform": {
-    "ads": {
-      "enabled": true,
-      "visibility": {
-        "banner": true,
-        "interstitial": true,
-        "native": true,
-        "native_banner": false,
-        "app_open": true,
-        "rewarded": false
-      },
-      "units": {
-        "app_id": "ca-app-pub-XXXXXXXXXXXXXXXX~YYYYYYYYYY",
-        "banner": "ca-app-pub-XXXXXXXXXXXXXXXX/YYYYYYYYYY",
-        "interstitial": "ca-app-pub-XXXXXXXXXXXXXXXX/YYYYYYYYYY",
-        "native": "ca-app-pub-XXXXXXXXXXXXXXXX/YYYYYYYYYY",
-        "app_open": "ca-app-pub-XXXXXXXXXXXXXXXX/YYYYYYYYYY",
-        "rewarded": ""
+  "parameterGroups": {
+    "PAYWALL": {
+      "description": "Paywall delay settings",
+      "parameters": {
+        "delay_paywall_android": { "defaultValue": { "value": "3" }, "valueType": "NUMBER" },
+        "delay_paywall_ios":   { "defaultValue": { "value": "0" }, "valueType": "NUMBER" },
+        "delay_paywall_macos": { "defaultValue": { "value": "0" }, "valueType": "NUMBER" }
       }
     },
-    "splash": {
-      "show_paywall_after_splash": false,
-      "give_fully_premium": false,
-      "show_on_boardings": false,
-      "show_ad_after_splash": false,
-      "onboarding": {
-        "subscription": {
-          "required": false,
-          "selected_plan_product_id": "",
-          "revenuecat_index": 0,
-          "selected_plan_type": "weekly",
-          "trial": { "enabled": false, "duration_days": 0 }
-        },
-        "show_paywall_after_onboarding": false,
-        "button_text": "Continue"
+    "FREE_LIMITS": {
+      "description": "Free usage limits",
+      "parameters": {
+        "free_reminder_limit_android": { "defaultValue": { "value": "1" }, "description": "-1 for unlimited", "valueType": "NUMBER" },
+        "free_reminder_limit_ios":   { "defaultValue": { "value": "1" }, "description": "-1 for unlimited", "valueType": "NUMBER" },
+        "free_reminder_limit_macos": { "defaultValue": { "value": "3" }, "description": "-1 for unlimited", "valueType": "NUMBER" },
+        "free_user_limit_android": { "defaultValue": { "value": "1" }, "description": "-1 for unlimited", "valueType": "NUMBER" },
+        "free_user_limit_ios":   { "defaultValue": { "value": "1" }, "description": "-1 for unlimited", "valueType": "NUMBER" },
+        "free_user_limit_macos": { "defaultValue": { "value": "1" }, "description": "-1 for unlimited", "valueType": "NUMBER" }
       }
     },
-    "result_screen": {
-      "show_discount_popup_on_back": false,
-      "discount_popup": {
-        "trial": { "enabled": false, "duration_days": 0 },
-        "plan": { "revenuecat_index": 0, "product_id": "", "type": "weekly" },
-        "button_text": "Start Free Trial"
+    "ADS": {
+      "description": "Ads control flags",
+      "parameters": {
+        "show_banner_android": { "defaultValue": { "value": "true" }, "valueType": "BOOLEAN" },
+        "show_banner_ios":   { "defaultValue": { "value": "true" }, "valueType": "BOOLEAN" },
+        "show_banner_macos": { "defaultValue": { "value": "false" }, "valueType": "BOOLEAN" },
+        "show_native_android": { "defaultValue": { "value": "true" }, "valueType": "BOOLEAN" },
+        "show_native_ios":   { "defaultValue": { "value": "true" }, "valueType": "BOOLEAN" },
+        "show_native_macos": { "defaultValue": { "value": "false" }, "valueType": "BOOLEAN" },
+        "show_interstitial_android": { "defaultValue": { "value": "true" }, "valueType": "BOOLEAN" },
+        "show_interstitial_ios":   { "defaultValue": { "value": "true" }, "valueType": "BOOLEAN" },
+        "show_interstitial_macos": { "defaultValue": { "value": "false" }, "valueType": "BOOLEAN" },
+        "show_open_app_android": { "defaultValue": { "value": "true" }, "valueType": "BOOLEAN" },
+        "show_open_app_ios":   { "defaultValue": { "value": "true" }, "valueType": "BOOLEAN" },
+        "show_open_app_macos": { "defaultValue": { "value": "false" }, "valueType": "BOOLEAN" },
+        "show_ads_android": { "defaultValue": { "value": "true" }, "valueType": "BOOLEAN" },
+        "show_ads_ios":   { "defaultValue": { "value": "true" }, "valueType": "BOOLEAN" },
+        "show_ads_macos": { "defaultValue": { "value": "false" }, "valueType": "BOOLEAN" }
       }
     },
-    "globall": {
-      "lock_download": false,
-      "lock_share": false,
-      "lock_copy": false
-    },
-    "limits": {
-      "global_conversion": 5,
-      "other_tools_limits": {},
-      "file_size": { "free": 5.0, "premium": 20.0 },
-      "batch": { "is_locked": false, "limits": { "free": 5, "premium": 20 } }
-    },
-    "paywall": {
-      "plans": [],
-      "ui": { "button_text": "Continue", "show_back_discount_popup": false },
-      "cross_or_continue_free": "cross",
-      "delay_seconds": 0
-    },
-    "ai": {
-      "enabled": false,
-      "provider": { "model": "", "prompt": "" },
-      "default_provider": "gemini"
-    },
-    "pro_banner": {
-      "show_pro_banner": false,
-      "trigger": { "paywall_or_plan": "", "revenuecat_index": 0, "product_id": "", "type": "weekly" },
-      "show_for_firstime": false
+    "UPGRADER": {
+      "description": "Upgrade dialog controls",
+      "parameters": {
+        "show_upgrader_android": { "defaultValue": { "value": "false" }, "valueType": "BOOLEAN" },
+        "show_upgrade_later_android": { "defaultValue": { "value": "false" }, "valueType": "BOOLEAN" },
+        "show_upgrade_ignore_android": { "defaultValue": { "value": "false" }, "valueType": "BOOLEAN" },
+        "show_upgrader_ios": { "defaultValue": { "value": "false" }, "valueType": "BOOLEAN" },
+        "show_upgrade_later_ios": { "defaultValue": { "value": "false" }, "valueType": "BOOLEAN" },
+        "show_upgrade_ignore_ios": { "defaultValue": { "value": "false" }, "valueType": "BOOLEAN" },
+        "show_upgrader_macos": { "defaultValue": { "value": "false" }, "valueType": "BOOLEAN" },
+        "show_upgrade_later_macos": { "defaultValue": { "value": "false" }, "valueType": "BOOLEAN" },
+        "show_upgrade_ignore_macos": { "defaultValue": { "value": "false" }, "valueType": "BOOLEAN" }
+      }
     }
   }
 }
 ```
 
-#### Step 3.4: Replace the placeholders
+#### Step 3.4: Ad unit IDs
 
-Replace every `ca-app-pub-XXXXXXXXXXXXXXXX/YYYYYYYYYY` with your actual ad unit IDs:
-- `app_id` → your AdMob **App ID** (with `~`)
-- `banner` → your Banner **Ad unit ID** (with `/`)
-- `interstitial` → your Interstitial Ad unit ID
-- `native` → your Native Ad unit ID
-- `app_open` → your App Open Ad unit ID
-- `rewarded` → your Rewarded Ad unit ID (or leave empty if not using)
+Ad unit IDs live under package-internal keys (prefixed `oc_`). The defaults are Google's **test ad IDs**, so ads work in development with zero setup. To use real ads, set the `oc_ads_unit_*` parameters in Remote Config (per platform):
+
+| Parameter | Example value |
+|-----------|---------------|
+| `oc_ads_unit_app_id_android` | `ca-app-pub-XXXXXXXXXXXXXXXX~YYYYYYYYYY` |
+| `oc_ads_unit_banner_android` | `ca-app-pub-XXXXXXXXXXXXXXXX/YYYYYYYYYY` |
+| `oc_ads_unit_interstitial_android` | `ca-app-pub-XXXXXXXXXXXXXXXX/YYYYYYYYYY` |
+| `oc_ads_unit_native_android` | `ca-app-pub-XXXXXXXXXXXXXXXX/YYYYYYYYYY` |
+| `oc_ads_unit_app_open_android` | `ca-app-pub-XXXXXXXXXXXXXXXX/YYYYYYYYYY` |
+| `oc_ads_unit_rewarded_android` | `ca-app-pub-XXXXXXXXXXXXXXXX/YYYYYYYYYY` |
+
+(Repeat with `_ios` / `_macos` suffixes as needed.)
 
 #### Step 3.5: Publish changes
 
@@ -397,7 +398,7 @@ Click **Publish changes** at the top right. Without this, the config is not live
 
 #### Step 3.6: Configure visibility flags
 
-In the same JSON, set the `visibility` flags:
+Set the `show_*` boolean flags:
 - `true` = this ad format is enabled (will load when not premium)
 - `false` = this ad format is killed globally (no ad requests, even for free users)
 
@@ -575,6 +576,12 @@ Future<void> main() async {
     defaultPlanType: 'weekly',
     defaultPlanProductId: 'com.myapp.pro.weekly',
     defaultTrialDays: 3,
+
+    // Optional: override any flat RC key per platform (null/empty → package default)
+    remoteConfigDefaults: {
+      'show_banner_android': false,
+      'oc_limits_global_conversion': 10,
+    },
   ));
 
   // 4. Wrap runApp with zone guard for crash capture
@@ -724,6 +731,25 @@ final aiPrompt = OfficeCore.rc.current.platform.ai.provider.prompt;
 // Limits
 final globalConversion = OfficeCore.rc.current.platform.limits.globalConversion;
 final toolLimits = OfficeCore.rc.current.platform.limits.otherToolsLimits;
+
+// Free limits + upgrader (app-specific flat keys)
+final reminderLimit = OfficeCore.rc.current.platform.freeLimits.reminderLimit; // -1 = unlimited
+final isReminderUnlimited = OfficeCore.rc.current.platform.freeLimits.isReminderUnlimited;
+final userLimit = OfficeCore.rc.current.platform.freeLimits.userLimit;
+final showUpgrader = OfficeCore.rc.current.platform.upgrader.showUpgrader;
+```
+
+#### Read app-specific flat keys directly
+
+If your Remote Config has custom per-platform keys (e.g. `free_reminder_limit_android`),
+you don't need them in the typed model — read them straight off the service. The
+platform suffix is resolved automatically:
+
+```dart
+final reminderLimit = OfficeCore.rc.intValue('free_reminder_limit'); // resolves _android/_ios/_macos
+final showUpgrader  = OfficeCore.rc.boolValue('show_upgrader');
+final customStr     = OfficeCore.rc.stringValue('my_custom_key');
+final customDouble  = OfficeCore.rc.doubleValue('my_custom_double');
 ```
 
 #### Listen for config changes
@@ -1121,6 +1147,47 @@ premium.dispose();
 
 ## 📋 Remote Config JSON Schema (Full Reference)
 
+> **Note:** OfficeCore v1.1+ reads **flat, per-platform keys** (suffixed `_android` / `_ios` / `_macos`), not the legacy single `office_config_v1` JSON blob. The example JSON in [Step 3.3](#step-33-minimal-example--the-office-rc-json) is the canonical schema. The legacy nested structure below is retained only for reference.
+
+### Flat key reference (per platform suffix)
+
+| Flat key (add `_android` / `_ios` / `_macos`) | Type | Meaning |
+|-----------------------------------------------|------|---------|
+| `show_ads` | bool | Master ads switch |
+| `show_banner` | bool | Banner ads |
+| `show_native` | bool | Native ads |
+| `show_interstitial` | bool | Interstitial ads |
+| `show_open_app` | bool | App-open ads |
+| `free_reminder_limit` | int | Free reminder limit (`-1` = unlimited) |
+| `free_user_limit` | int | Free user limit (`-1` = unlimited) |
+| `show_upgrader` | bool | Force-update dialog |
+| `show_upgrade_later` | bool | Show "later" button |
+| `show_upgrade_ignore` | bool | Show "ignore" button |
+| `delay_paywall` | int | Paywall delay (seconds) |
+| `oc_ads_unit_app_id` | string | AdMob App ID |
+| `oc_ads_unit_banner` | string | Banner unit ID |
+| `oc_ads_unit_interstitial` | string | Interstitial unit ID |
+| `oc_ads_unit_native` | string | Native unit ID |
+| `oc_ads_unit_app_open` | string | App-open unit ID |
+| `oc_ads_unit_rewarded` | string | Rewarded unit ID |
+| `oc_ads_visibility_native_banner` | bool | Native-banner visibility |
+| `oc_ads_visibility_rewarded` | bool | Rewarded visibility |
+| `oc_limits_global_conversion` | int | Global conversion limit |
+| `oc_limits_file_size_free` | double | File-size limit (free) |
+| `oc_limits_file_size_premium` | double | File-size limit (premium) |
+| `oc_limits_batch_locked` | bool | Batch locked |
+| `oc_limits_batch_free` | int | Batch limit (free) |
+| `oc_limits_batch_premium` | int | Batch limit (premium) |
+| `oc_tool_limit_<toolId>` | int | Per-tool limit override |
+| `oc_lock_download` / `oc_lock_share` / `oc_lock_copy` | bool | Feature locks |
+| `oc_ai_enabled` / `oc_ai_model` / `oc_ai_prompt` / `oc_ai_provider` | mixed | AI config |
+| `oc_pro_banner_show` / `oc_pro_banner_firstime` | bool | Pro banner |
+| `oc_splash_*` / `oc_result_*` / `oc_paywall_*` | mixed | Splash / result / paywall config |
+
+> Any key **not** provided (or provided as `null`/empty) falls back to the package default.
+
+<details><summary>Legacy single-JSON schema (retained for reference)</summary>
+
 The full JSON document stored under the Firebase Remote Config key `office_config_v1`:
 
 ```json
@@ -1208,6 +1275,8 @@ The full JSON document stored under the Firebase Remote Config key `office_confi
   }
 }
 ```
+
+</details>
 
 ### Field Reference
 
@@ -1339,7 +1408,7 @@ When you need to make a breaking schema change:
 | `notificationBackend` | `NotificationBackendConfig?` | ✅* | — | Notification endpoint, DB path, topics (*required if `enableNotifications` is true) |
 | `env` | `OfficeEnv` | ❌ | `production` | Environment (affects log verbosity) |
 | `logLevel` | `OfficeLogLevel?` | ❌ | dev: `debug`, release: `warning` | Override log level |
-| `remoteConfigDefaults` | `OfficeRemoteConfig?` | ❌ | `defaultProduction` | Bundled fallback config used when RC fetch fails |
+| `remoteConfigDefaults` | `Map<String, dynamic>?` | ❌ | `null` | Optional per-platform flat RC defaults merged on top of package defaults (e.g. `{'show_banner_android': false}`). `null`/empty-string values fall back to package defaults. |
 | `remoteConfigFetchTimeout` | `Duration` | ❌ | `4s` | RC fetch timeout |
 | `enableCrashlytics` | `bool` | ❌ | `true` | Enable/disable crashlytics |
 | `enableAnalytics` | `bool` | ❌ | `true` | Enable/disable analytics |
@@ -1367,6 +1436,7 @@ When you need to make a breaking schema change:
 
 Every subsystem catches its own initialization errors and degrades to a no-op. The host app **never crashes** due to an OfficeCore failure.
 
+- **No internet / RC unavailable** → the app launches immediately on the **bundled defaults** and keeps running. The moment connectivity is restored, OfficeCore **automatically re-fetches** Remote Config and emits the updated `OfficeCore.rc.changes` — no code needed.
 - **RC fetch fails** → falls back to bundled defaults (`OfficeRemoteConfig.defaultProduction`).
 - **Crashlytics init fails** → `record()` and `log()` become no-ops.
 - **Ads init fails** → ad widgets render `SizedBox.shrink()`.
@@ -1429,7 +1499,7 @@ flutter run
 To fully run the example, you need to:
 1. Create a Firebase project and add config files (see [Prerequisites Setup](#-prerequisites-setup))
 2. Add AdMob App ID to `android/app/src/main/AndroidManifest.xml` and `ios/Runner/Info.plist`
-3. Set up the `office_config_v1` Remote Config parameter (use the test ad unit IDs from [Step 3.7](#step-37-test-ad-unit-ids-during-development))
+3. Set up the flat Remote Config parameters (use the test ad unit IDs from [Step 3.7](#step-37-test-ad-unit-ids-during-development))
 4. Uncomment the `Firebase.initializeApp()` and `OfficeCore.initialize()` lines in `example/lib/main.dart`
 
 ---
@@ -1439,7 +1509,7 @@ To fully run the example, you need to:
 If you have existing ad controllers, notification controllers, or RC services copied into individual apps, migrate in 10 phases (each independently shippable):
 
 1. **Scaffold plugin repo** — add `office_core` dependency
-2. **Port typed RC model** — set up `office_config_v1` in Firebase
+2. **Port typed RC model** — set up flat per-platform RC parameters in Firebase
 3. **Migrate one app to new RC model** (ads/notifications unchanged) — validates JSON schema
 4. **Introduce `PremiumStatusProvider`** — wrap existing PremiumController
 5. **Move ads widgets + controller into plugin** — remove local copies
@@ -1455,7 +1525,7 @@ If you have existing ad controllers, notification controllers, or RC services co
 
 ### Q: Where do I put my ad unit IDs?
 
-**In Firebase Remote Config, not in code.** Create a parameter named `office_config_v1` (type: String) and paste the full JSON. Put your ad unit IDs in the `ads.units.*` fields. See [Prerequisites Setup → Step 3](#3-remote-config-setup--where-to-put-ad-unit-ids) for the complete walkthrough.
+**In Firebase Remote Config, not in code.** Create flat, per-platform parameters (e.g. `oc_ads_unit_banner_android`, `show_banner_ios`) as described in [Prerequisites Setup → Step 3](#3-remote-config-setup--where-to-put-ad-unit-ids). OfficeCore auto-resolves the current platform suffix. See that section for the complete walkthrough.
 
 ### Q: Can I use different ad unit IDs for Android and iOS?
 
@@ -1511,7 +1581,7 @@ Check:
 1. Did you click **Publish changes** in the Firebase console?
 2. Is `minimumFetchInterval` set to `Duration.zero`? (default in OfficeCore)
 3. Try calling `OfficeCore.rc.refresh()` manually.
-4. Check that the parameter key is exactly `office_config_v1`.
+4. Check that your per-platform parameter keys exist (e.g. `show_banner_android`, `oc_ads_unit_banner_ios`) and are published.
 5. Check that the JSON is valid (no trailing commas, properly escaped strings).
 
 ---

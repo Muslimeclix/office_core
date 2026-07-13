@@ -7,7 +7,6 @@ import 'analytics/office_analytics_service.dart';
 import 'crashlytics/office_crashlytics.dart';
 import 'notifications/office_notification_controller.dart';
 import 'premium/premium_status_provider.dart';
-import 'remote_config/models/office_remote_config.dart';
 import 'remote_config/office_remote_config_service.dart';
 import 'trial/office_trial_service.dart';
 import 'util/connectivity_service.dart';
@@ -65,10 +64,11 @@ class OfficeCoreConfig {
   /// in dev and [OfficeLogLevel.warning] in release.
   final OfficeLogLevel? logLevel;
 
-  /// Bundled default [OfficeRemoteConfig] used when RC fetch fails or before
-  /// the first successful fetch completes. Defaults to
-  /// [OfficeRemoteConfig.defaultProduction].
-  final OfficeRemoteConfig? remoteConfigDefaults;
+  /// Optional per-platform flat Remote Config defaults merged on top of the
+  /// package defaults (e.g. `{'show_banner_android': false, ...}`). Keys not
+  /// provided — or provided as `null`/empty string — fall back to the
+  /// package default. Defaults to `null` (package defaults only).
+  final Map<String, dynamic>? remoteConfigDefaults;
 
   /// RC fetch timeout. Default: 4 seconds.
   final Duration remoteConfigFetchTimeout;
@@ -238,53 +238,16 @@ class OfficeCore {
 
     // 3. Initialize Remote Config
     final rc = OfficeRemoteConfigService(logger: logger);
-    
-    // Inject top-level app-specific defaults if no custom RC object was provided
-    OfficeRemoteConfig finalDefaults = config.remoteConfigDefaults ?? OfficeRemoteConfig.defaultProduction;
-    if (config.remoteConfigDefaults == null) {
-      try {
-        final json = finalDefaults.toJson();
-        // Overrides for Onboarding
-        json['platform']['splash']['onboarding']['subscription']['selected_plan_type'] = config.defaultPlanType;
-        json['platform']['splash']['onboarding']['subscription']['selected_plan_product_id'] = config.defaultPlanProductId;
-        json['platform']['splash']['onboarding']['subscription']['trial']['duration_days'] = config.defaultTrialDays;
-        
-        // Overrides for Discount Popup
-        json['platform']['result_screen']['discount_popup']['plan']['type'] = config.defaultPlanType;
-        json['platform']['result_screen']['discount_popup']['plan']['product_id'] = config.defaultPlanProductId;
-        json['platform']['result_screen']['discount_popup']['trial']['duration_days'] = config.defaultTrialDays;
-        
-        // Paywall
-        json['platform']['paywall']['plans'] = [
-          {
-            'revenuecat_index': 0, 
-            'product_id': config.defaultPlanProductId, 
-            'plan_duration': config.defaultPlanType, 
-            'has_trial': config.defaultTrialDays > 0
-          }
-        ];
-
-        // Tool limits — inject code-defined tool names as baseline defaults
-        // RC can override individual values, but tool names come from code
-        // to avoid generic keys like "tool1", "tool2" in the RC JSON.
-        final limitsJson = json['platform']['limits'] as Map<String, dynamic>;
-        final existingRcMap = limitsJson['other_tools_limits'] as Map<String, dynamic>? ?? {};
-        final merged = <String, int>{...config.toolLimits};
-        for (final entry in existingRcMap.entries) {
-          merged[entry.key] = (entry.value as num).toInt();
-        }
-        limitsJson['other_tools_limits'] = merged;
-
-        finalDefaults = OfficeRemoteConfig.fromJson(json);
-      } catch (e) {
-        logger.warning('Failed to inject top-level RC defaults: $e');
-      }
-    }
 
     await rc.initialize(
-      defaults: finalDefaults,
+      userDefaults: config.remoteConfigDefaults,
+      toolLimits: config.toolLimits,
+      defaultPlanType: config.defaultPlanType,
+      defaultPlanProductId: config.defaultPlanProductId,
+      defaultTrialDays: config.defaultTrialDays,
       fetchTimeout: config.remoteConfigFetchTimeout,
     );
+    rc.watchConnectivity(connectivity);
 
     // Initialize Crashlytics
     final crashlytics = OfficeCrashlytics(logger: logger);
