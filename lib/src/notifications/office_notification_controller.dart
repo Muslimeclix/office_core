@@ -115,7 +115,7 @@ class OfficeNotificationController extends ChangeNotifier {
   ///
   /// If [silent] is true, permission is NOT requested (caller handles it
   /// separately via [requestPermission]).
-  Future<void> initialize({bool silent = false}) async {
+  Future<void> initialize({bool silent = true}) async {
     await _initializeLocalNotifications();
     await _initializeFirebaseMessaging();
     await _registerDevice();
@@ -229,7 +229,17 @@ class OfficeNotificationController extends ChangeNotifier {
           return;
         }
       }
-      for (final topic in _backend.topics) {
+      
+      final packageInfo = await PackageInfo.fromPlatform();
+      final pkg = packageInfo.packageName.replaceAll('.', '_');
+      
+      final topicsToSubscribe = <String>{
+        ..._backend.topics,
+        'all_users_$pkg',
+        'weekly_$pkg',
+      };
+      
+      for (final topic in topicsToSubscribe) {
         await _messaging.subscribeToTopic(topic);
         _logger.info('Subscribed to topic: $topic');
       }

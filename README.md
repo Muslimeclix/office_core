@@ -51,10 +51,11 @@ A Flutter plugin that consolidates **Remote Config**, **Ads**, **Crashlytics**,
 |-----------|-------------|
 | **Remote Config** | Strongly-typed JSON config model with versioned schema, automatic refresh on connectivity restore, broadcast change stream. |
 | **Ads** | Banner, native, interstitial, and app-open ad support. Ad unit IDs and visibility flags fetched from Remote Config. `OfficeBannerAd` and `OfficeNativeAd` widgets with shimmer loading states. |
-| **Crashlytics** | Wraps Firebase Crashlytics with breadcrumb logging, custom keys, and zone-guarded error capture. |
-| **Analytics** | Drop-in `RouteObserver` for automatic screen-view tracking and `logEvent` for custom events. |
-| **Notifications** | FCM + `flutter_local_notifications`. Device registration, topic subscription, tap navigation, progress notification helper. |
+| **Crashlytics** | Wraps Firebase Crashlytics with breadcrumb logging, custom keys, and zone-guarded error capture. Auto-syncs unified UDID. |
+| **Analytics** | Drop-in `RouteObserver` for automatic screen-view tracking and `logEvent` for custom events. Auto-syncs unified UDID. |
+| **Notifications** | FCM + `flutter_local_notifications`. Device registration, dynamic topic subscription (package-specific), tap navigation, progress notification helper. |
 | **Trial & Limits** | Conversion limits, file-size limits, batch limits, feature locks (download/share/copy), and local usage tracking. |
+| **Consent (UMP)** | Automatically requests GDPR/ATT consent via Google UMP SDK before initializing ads and analytics. |
 
 ### Abstractions
 
@@ -564,6 +565,9 @@ Future<void> main() async {
     enableAnalytics: true,
     enableNotifications: true,
     consentRequired: true,
+    defaultPlanType: 'weekly',
+    defaultPlanProductId: 'com.myapp.pro.weekly',
+    defaultTrialDays: 3,
   ));
 
   // 4. Wrap runApp with zone guard for crash capture
@@ -628,6 +632,7 @@ OfficeBannerAd(adSize: AdSize(width: 320, height: 100))
 OfficeNativeAd(templateType: TemplateType.medium)  // 350px height
 OfficeNativeAd(templateType: TemplateType.small)   // 95px height
 ```
+> **AdMob Safety:** `OfficeNativeAd` automatically handles loading retries, but safely halts retries on `NO_FILL` (error code 3) to strictly comply with AdMob spam policies and prevent bans.
 
 #### Show interstitial ads
 
@@ -922,13 +927,20 @@ await OfficeCore.analytics.resetAnalyticsData();
 
 #### Request permission
 
+By default, OfficeCore initializes notifications silently without prompting the user on first launch (`silent: true` is the default). You should request permission manually later in the user journey.
+
 ```dart
 // On iOS/macOS: shows system permission dialog
 // On Android 13+: shows runtime permission dialog
 await OfficeCore.notifications?.requestPermission();
 ```
 
-Best practice: call this after explaining to the user why you want notifications (e.g., behind a "Enable notifications" button), not on first launch.
+Best practice: call this after explaining to the user why you want notifications (e.g., behind an "Enable notifications" button), not immediately on startup.
+
+#### Topic Subscription (Automatic & Dynamic)
+
+OfficeCore automatically subscribes the user to any topics defined in `NotificationBackendConfig.topics`.
+Additionally, it dynamically fetches the app's package name and subscribes to `all_users_{package_name}` and `weekly_{package_name}` to make targeted campaigns effortless without needing to hardcode package names.
 
 #### Get FCM token
 
@@ -1322,7 +1334,10 @@ When you need to make a breaking schema change:
 | `enableAnalytics` | `bool` | ❌ | `true` | Enable/disable analytics |
 | `enableAds` | `bool` | ❌ | `true` | Enable/disable ads |
 | `enableNotifications` | `bool` | ❌ | `true` | Enable/disable notifications |
-| `consentRequired` | `bool` | ❌ | `true` | Require consent before ads/analytics |
+| `consentRequired` | `bool` | ❌ | `true` | Require GDPR/ATT consent via UMP SDK before ads/analytics init |
+| `defaultPlanType` | `String` | ❌ | `'weekly'` | Overrides the default plan type for paywalls in the fallback config |
+| `defaultPlanProductId` | `String` | ❌ | `''` | Overrides the default product ID for paywalls in the fallback config |
+| `defaultTrialDays` | `int` | ❌ | `3` | Overrides the default trial days in the fallback config |
 
 ### `NotificationBackendConfig`
 

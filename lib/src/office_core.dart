@@ -1,6 +1,8 @@
-import 'package:shared_preferences/shared_preferences.dart';
+import 'dart:async';
 
-import 'ads/office_ads_controller.dart';
+import 'package:flutter_udid/flutter_udid.dart';
+import 'package:google_mobile_ads/google_mobile_ads.dart';
+import 'package:shared_preferences/shared_preferences.dart';import 'ads/office_ads_controller.dart';
 import 'analytics/office_analytics_service.dart';
 import 'crashlytics/office_crashlytics.dart';
 import 'notifications/office_notification_controller.dart';
@@ -28,6 +30,9 @@ class OfficeCoreConfig {
     this.env = OfficeEnv.production,
     this.logLevel,
     this.remoteConfigDefaults,
+    this.defaultPlanType = 'weekly',
+    this.defaultPlanProductId = '',
+    this.defaultTrialDays = 3,
     this.remoteConfigFetchTimeout = const Duration(seconds: 4),
     this.enableCrashlytics = true,
     this.enableAnalytics = true,
@@ -36,6 +41,15 @@ class OfficeCoreConfig {
     this.notificationBackend,
     this.consentRequired = true,
   });
+
+  /// Default plan type (e.g. 'weekly') applied to default remote config if not overridden.
+  final String defaultPlanType;
+  
+  /// Default plan product ID applied to default remote config if not overridden.
+  final String defaultPlanProductId;
+  
+  /// Default trial days applied to default remote config if not overridden.
+  final int defaultTrialDays;
 
   /// Premium status provider. The plugin cannot know how the app tracks
   /// premium (RevenueCat, StoreKit, custom, GetX). Pass any class that
@@ -148,6 +162,9 @@ class OfficeCore {
   /// Initialize OfficeCore. Must be called once in `main()` before
   /// `runApp()`.
   ///
+  /// Note: If `config.consentRequired` is true, this will pause initialization
+  /// to show the GDPR/ATT consent form (if applicable for the user).
+  ///
   /// This method never throws — every subsystem catches its own init errors
   /// and degrades gracefully. The host app should not crash due to an
   /// OfficeCore failure.
@@ -187,21 +204,69 @@ class OfficeCore {
     final connectivity = OfficeConnectivityService.instance;
     connectivity.initialize();
 
-    // Initialize Remote Config
+    // 1. Consent Management
+    if (config.consentRequired) {
+      await _requestConsent(logger);
+    }
+
+    // 2. Unified User ID
+    String udid = '';
+    try {
+      udid = await FlutterUdid.udid;
+    } catch (e) {
+      logger.warning('Failed to get UDID: $e');
+    }
+
+    // 3. Initialize Remote Config
     final rc = OfficeRemoteConfigService(logger: logger);
+    
+    // Inject top-level app-specific defaults if no custom RC object was provided
+    OfficeRemoteConfig finalDefaults = config.remoteConfigDefaults ?? OfficeRemoteConfig.defaultProduction;
+    if (config.remoteConfigDefaults == null) {
+      try {
+        final json = finalDefaults.toJson();
+        // Overrides for Onboarding
+        json['platform']['splash']['onboarding']['subscription']['selected_plan_type'] = config.defaultPlanType;
+        json['platform']['splash']['onboarding']['subscription']['selected_plan_product_id'] = config.defaultPlanProductId;
+        json['platform']['splash']['onboarding']['subscription']['trial']['duration_days'] = config.defaultTrialDays;
+        
+        // Overrides for Discount Popup
+        json['platform']['result_screen']['discount_popup']['plan']['type'] = config.defaultPlanType;
+        json['platform']['result_screen']['discount_popup']['plan']['product_id'] = config.defaultPlanProductId;
+        json['platform']['result_screen']['discount_popup']['trial']['duration_days'] = config.defaultTrialDays;
+        
+        // Paywall
+        json['platform']['paywall']['plans'] = [
+          {
+            'revenuecat_index': 0, 
+            'product_id': config.defaultPlanProductId, 
+            'plan_duration': config.defaultPlanType, 
+            'has_trial': config.defaultTrialDays > 0
+          }
+        ];
+        finalDefaults = OfficeRemoteConfig.fromJson(json);
+      } catch (e) {
+        logger.warning('Failed to inject top-level RC defaults: $e');
+      }
+    }
+
     await rc.initialize(
-      defaults: config.remoteConfigDefaults,
+      defaults: finalDefaults,
       fetchTimeout: config.remoteConfigFetchTimeout,
     );
 
     // Initialize Crashlytics
     final crashlytics = OfficeCrashlytics(logger: logger);
     if (config.enableCrashlytics) {
+      if (udid.isNotEmpty) await crashlytics.setUserIdentifier(udid);
       await crashlytics.sendUnsentReports();
     }
 
     // Initialize Analytics
     final analytics = OfficeAnalyticsService(logger: logger);
+    if (config.enableAnalytics && udid.isNotEmpty) {
+      await analytics.setUserId(udid);
+    }
 
     // Initialize Ads
     final ads = OfficeAdsController(
@@ -261,6 +326,31 @@ class OfficeCore {
 
   /// Whether [initialize] has been called and completed.
   static bool get isInitialized => _instance != null;
+
+  /// Private helper for UMP Consent flow
+  static Future<void> _requestConsent(OfficeLogger logger) async {
+    final completer = Completer<void>();
+    ConsentInformation.instance.requestConsentInfoUpdate(
+      ConsentRequestParameters(),
+      () async {
+        if (await ConsentInformation.instance.isConsentFormAvailable()) {
+          ConsentForm.loadAndShowConsentFormIfRequired((loadAndShowError) {
+            if (loadAndShowError != null) {
+              logger.warning('Consent loadAndShow error: ${loadAndShowError.message}');
+            }
+            completer.complete();
+          });
+        } else {
+          completer.complete();
+        }
+      },
+      (FormError error) {
+        logger.warning('Consent request info update error: ${error.message}');
+        completer.complete();
+      },
+    );
+    return completer.future;
+  }
 }
 
 class _Services {

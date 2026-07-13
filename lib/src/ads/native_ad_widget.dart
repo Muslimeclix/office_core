@@ -103,7 +103,8 @@ class _OfficeNativeAdState extends State<OfficeNativeAd> {
         },
         onAdFailedToLoad: (ad, error) {
           ad.dispose();
-          if (_retryCount < _maxRetries) {
+          // Error code 3 is NO_FILL. Do not retry on NO_FILL to avoid AdMob spam policies.
+          if (_retryCount < _maxRetries && error.code != 3) {
             _retryCount++;
             Future.delayed(const Duration(seconds: 2), () {
               if (mounted) _loadAd();
