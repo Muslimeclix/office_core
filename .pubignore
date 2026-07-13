@@ -1,0 +1,32 @@
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE files
+.idea/
+.vscode/
+*.iml
+
+# Flutter / Dart
+.dart_tool/
+.packages
+pubspec.lock
+build/
+
+# Git
+.git/
+.gitignore
+.gitattributes
+
+# Documentation not needed on pub.dev
+docs/
+CONTRIBUTING.md
+
+# Example app (consumers don't need it)
+example/android/
+
+# Tests (consumers don't need them)
+test/
+
+build/
+
