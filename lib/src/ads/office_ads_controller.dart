@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:google_mobile_ads/google_mobile_ads.dart';
 
 import '../premium/premium_status_provider.dart';
+import '../remote_config/models/office_remote_config.dart';
 import '../remote_config/office_remote_config_service.dart';
 import '../util/connectivity_service.dart';
 import '../util/lifecycle_service.dart';
@@ -268,20 +269,35 @@ class OfficeAdsController extends ChangeNotifier {
 
   // ── Unit ID accessors (for widgets) ──────────────────────────────────────
 
-  /// Banner ad unit ID (from RC `ads.units.banner`).
-  String get bannerUnitId => _rc.current.platform.ads.units.banner;
+  /// Banner ad unit ID (from RC `ads.units.banner`). Falls back to test ID if empty.
+  String get bannerUnitId {
+    final id = _rc.current.platform.ads.units.banner;
+    return id.isNotEmpty ? id : AdsUnits.test.banner;
+  }
 
-  /// Native ad unit ID (from RC `ads.units.native`).
-  String get nativeUnitId => _rc.current.platform.ads.units.native;
+  /// Native ad unit ID (from RC `ads.units.native`). Falls back to test ID if empty.
+  String get nativeUnitId {
+    final id = _rc.current.platform.ads.units.native;
+    return id.isNotEmpty ? id : AdsUnits.test.native;
+  }
 
-  /// Interstitial ad unit ID (from RC `ads.units.interstitial`).
-  String get interstitialUnitId => _rc.current.platform.ads.units.interstitial;
+  /// Interstitial ad unit ID (from RC `ads.units.interstitial`). Falls back to test ID if empty.
+  String get interstitialUnitId {
+    final id = _rc.current.platform.ads.units.interstitial;
+    return id.isNotEmpty ? id : AdsUnits.test.interstitial;
+  }
 
-  /// App-open ad unit ID (from RC `ads.units.app_open`).
-  String get appOpenUnitId => _rc.current.platform.ads.units.appOpen;
+  /// App-open ad unit ID (from RC `ads.units.app_open`). Falls back to test ID if empty.
+  String get appOpenUnitId {
+    final id = _rc.current.platform.ads.units.appOpen;
+    return id.isNotEmpty ? id : AdsUnits.test.appOpen;
+  }
 
-  /// Rewarded ad unit ID (from RC `ads.units.rewarded`).
-  String get rewardedUnitId => _rc.current.platform.ads.units.rewarded;
+  /// Rewarded ad unit ID (from RC `ads.units.rewarded`). Falls back to test ID if empty.
+  String get rewardedUnitId {
+    final id = _rc.current.platform.ads.units.rewarded;
+    return id.isNotEmpty ? id : AdsUnits.test.rewarded;
+  }
 
   @override
   void dispose() {

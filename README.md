@@ -551,6 +551,13 @@ Future<void> main() async {
     // Required: how does your app track premium status?
     premiumProvider: ValueNotifierPremiumProvider(ValueNotifier(false)),
 
+    // Required: define your app's tool names and their free-tier limits.
+    // Each tool's value can be overridden remotely via `limits.other_tools_limits`.
+    toolLimits: {
+      'pdf_translate': 5,
+      'image_compress': 10,
+    },
+
     // Required if enableNotifications is true
     notificationBackend: NotificationBackendConfig(
       openedApiUrl: 'https://your-api.com/notification/opened',
@@ -633,6 +640,8 @@ OfficeNativeAd(templateType: TemplateType.medium)  // 350px height
 OfficeNativeAd(templateType: TemplateType.small)   // 95px height
 ```
 > **AdMob Safety:** `OfficeNativeAd` automatically handles loading retries, but safely halts retries on `NO_FILL` (error code 3) to strictly comply with AdMob spam policies and prevent bans.
+
+> **Test IDs by default:** If Remote Config returns empty ad unit IDs (e.g., during development), OfficeCore falls back to Google's official test ad unit IDs automatically. No setup needed — ads just work with test ads until real IDs are put in Remote Config.
 
 #### Show interstitial ads
 
@@ -768,7 +777,8 @@ if (OfficeCore.trial.isTrialActive) {
 // Global conversion limit (per RC)
 final globalLimit = OfficeCore.trial.globalConversionLimit;
 
-// Per-tool limit (from RC other_tools_limits map)
+// Per-tool limit — tool names come from your code (OfficeCoreConfig.toolLimits),
+// individual limit values can be overridden remotely via RC.
 final toolLimit = OfficeCore.trial.toolLimit('pdf_translate');
 
 // File size limit (premium-aware — returns premium limit if user is pro)
@@ -1261,7 +1271,7 @@ The full JSON document stored under the Firebase Remote Config key `office_confi
 | Field | Type | Description |
 |-------|------|-------------|
 | `limits.global_conversion` | int | Max conversions per period for free users. |
-| `limits.other_tools_limits` | map | Per-tool limits, e.g., `{"pdf_translate": 5, "image_compress": 10}`. |
+| `limits.other_tools_limits` | map | Per-tool limit overrides. Tool names must also be defined in code (`OfficeCoreConfig.toolLimits`) — RC values override the code baseline. New tool names should be added in code, not RC. |
 | `limits.file_size.free` | double | Max file size (MB) for free users. |
 | `limits.file_size.premium` | double | Max file size (MB) for premium users. |
 | `limits.batch.is_locked` | bool | If true, batch processing requires premium. |
@@ -1325,6 +1335,7 @@ When you need to make a breaking schema change:
 | Parameter | Type | Required | Default | Description |
 |-----------|------|:--------:|:-------:|-------------|
 | `premiumProvider` | `PremiumStatusProvider` | ✅ | — | How your app tracks premium status |
+| `toolLimits` | `Map<String, int>` | ✅ | — | App-specific tool names + free-tier limits. Tool names are code-defined (never generic like `tool1`). RC can override individual values. |
 | `notificationBackend` | `NotificationBackendConfig?` | ✅* | — | Notification endpoint, DB path, topics (*required if `enableNotifications` is true) |
 | `env` | `OfficeEnv` | ❌ | `production` | Environment (affects log verbosity) |
 | `logLevel` | `OfficeLogLevel?` | ❌ | dev: `debug`, release: `warning` | Override log level |
@@ -1346,6 +1357,9 @@ When you need to make a breaking schema change:
 | `openedApiUrl` | `String` | ✅ | Endpoint called when a user opens a notification. The plugin POSTs `notification_uid`, `package_name`, `user_token`, `status`, `notification_reached_at`. |
 | `deviceRegistryPath` | `String` | ✅ | Firebase RTDB path under which device tokens are registered. |
 | `topics` | `List<String>` | ❌ | FCM topics to subscribe to. Default: `['all_users']`. |
+| `packageName` | `String?` | ❌ | Package name override (e.g. `com.mycompany.myapp`). Auto-detected if omitted. |
+| `appVersion` | `String?` | ❌ | App version override (e.g. `1.2.3`). Auto-detected if omitted. |
+| `buildNumber` | `String?` | ❌ | Build number override (e.g. `42`). Auto-detected if omitted. |
 
 ---
 
@@ -1465,7 +1479,11 @@ No. OfficeCore is IAP-agnostic. Fields like `revenuecat_index` and `product_id` 
 
 ### Q: How do I test ads without getting my AdMob account banned?
 
-Always use AdMob's test ad unit IDs during development. See [Step 3.7](#step-37-test-ad-unit-ids-during-development) for the test IDs. Never click your own live ads.
+Always use AdMob's test ad unit IDs during development. OfficeCore uses them as the default fallback — if Remote Config returns empty IDs, test IDs are used automatically. See [Step 3.7](#step-37-test-ad-unit-ids-during-development) for the test IDs list. Never click your own live ads.
+
+### Q: How do I define tool-specific limits?
+
+Pass a `Map<String, int>` as `toolLimits` in `OfficeCoreConfig`. The keys are your app's tool names (e.g. `'pdf_translate'`, `'image_compress'`), and the values are the free-tier limits. These serve as the baseline — RC can override individual values via `limits.other_tools_limits`, but tool names come from code to avoid generic keys like `"tool1"`, `"tool2"`.
 
 ### Q: Why is the JSON key `globall` (with two Ls)?
 

@@ -14,6 +14,10 @@ import '../remote_config/office_remote_config_service.dart';
 /// Share,Copy}) and combines them with [PremiumStatusProvider] to determine
 /// whether features are unlocked for the current user.
 ///
+/// Tool names and their free-tier limits are defined in code via
+/// [OfficeCoreConfig.toolLimits]. RC can override individual limit values
+/// but cannot introduce new tool names (they come from the app developer).
+///
 /// Usage tracking is persisted locally via [SharedPreferences]. Trial day
 /// tracking is also local-only in v1 — bypassable by reinstall. v2 will
 /// move trial validation server-side, keyed on a device fingerprint.
@@ -24,13 +28,19 @@ class OfficeTrialService extends ChangeNotifier {
     required OfficeRemoteConfigService rc,
     required PremiumStatusProvider premium,
     required SharedPreferences prefs,
+    Map<String, int> toolLimits = const {},
   })  : _rc = rc,
         _premium = premium,
-        _prefs = prefs;
+        _prefs = prefs,
+        _defaultToolLimits = Map.unmodifiable(toolLimits);
 
   final OfficeRemoteConfigService _rc;
   final PremiumStatusProvider _premium;
   final SharedPreferences _prefs;
+
+  /// Tool names and their baseline limits as defined by the app developer.
+  /// RC `limits.other_tools_limits` can override individual values.
+  final Map<String, int> _defaultToolLimits;
 
   static const _kInstallDateKey = 'office_core_install_date';
   static const _kUsagePrefix = 'office_core_usage_';
@@ -41,10 +51,16 @@ class OfficeTrialService extends ChangeNotifier {
   int get globalConversionLimit =>
       _rc.current.platform.limits.globalConversion;
 
-  /// Per-tool free limit (per RC `limits.other_tools_limits[toolId]`).
-  /// Returns 0 if the tool is not configured.
-  int toolLimit(String toolId) =>
-      _rc.current.platform.limits.otherToolsLimits[toolId] ?? 0;
+  /// Per-tool free limit. Tool names come from [OfficeCoreConfig.toolLimits]
+  /// (code-defined). RC `limits.other_tools_limits` can override the limit
+  /// value. Returns 0 if [toolId] is not found in either source.
+  int toolLimit(String toolId) {
+    // RC override wins if present
+    final rcLimit = _rc.current.platform.limits.otherToolsLimits[toolId];
+    if (rcLimit != null) return rcLimit;
+    // Fall back to code-defined baseline
+    return _defaultToolLimits[toolId] ?? 0;
+  }
 
   /// File size limit in MB. Returns the premium value if the user is premium,
   /// otherwise the free value.
@@ -144,11 +160,15 @@ class OfficeTrialService extends ChangeNotifier {
   }
 
   /// Whether the user has remaining global conversion quota. Premium users
-  /// always have quota.
+  /// always have quota. Considers both code-defined and RC-defined tools.
   bool hasRemainingGlobalConversion() {
     if (_premium.isPro) return true;
-    final totalUsage = _rc.current.platform.limits.otherToolsLimits.keys
-        .fold(0, (sum, toolId) => sum + getUsage(toolId));
+    final allToolIds = <String>{
+      ..._defaultToolLimits.keys,
+      ..._rc.current.platform.limits.otherToolsLimits.keys,
+    };
+    final totalUsage =
+        allToolIds.fold<int>(0, (sum, toolId) => sum + getUsage(toolId));
     return totalUsage < globalConversionLimit;
   }
 }

@@ -1,4 +1,3 @@
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:office_core/office_core.dart';
 
@@ -13,7 +12,7 @@ final ValueNotifier<bool> premiumNotifier = ValueNotifier<bool>(false);
 
 /// Premium provider backed by [premiumNotifier]. Uses the built-in
 /// [ValueNotifierPremiumProvider] adapter from office_core.
-late final ValueNotifierPremiumProvider examplePremiumProvider =
+ final ValueNotifierPremiumProvider examplePremiumProvider =
     ValueNotifierPremiumProvider(premiumNotifier);
 
 Future<void> main() async {

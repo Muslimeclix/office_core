@@ -21,12 +21,14 @@ enum OfficeEnv { development, staging, production }
 ///
 /// Required (app-specific) parameters:
 /// - [premiumProvider]
+/// - [toolLimits] — app-specific tool names and their free-tier limits
 /// - [notificationBackend] (if [enableNotifications] is true)
 ///
 /// All other parameters are optional with sensible defaults.
 class OfficeCoreConfig {
   const OfficeCoreConfig({
     required this.premiumProvider,
+    required this.toolLimits,
     this.env = OfficeEnv.production,
     this.logLevel,
     this.remoteConfigDefaults,
@@ -91,6 +93,23 @@ class OfficeCoreConfig {
   /// Whether consent (ATT/GDPR) is required before ads/analytics activate.
   /// Default: true.
   final bool consentRequired;
+
+  /// App-specific tool names and their free-tier usage limits.
+  ///
+  /// Example:
+  /// ```dart
+  /// toolLimits: {
+  ///   'pdf_translate': 5,
+  ///   'image_compress': 10,
+  ///   'ocr_scan': 3,
+  /// }
+  /// ```
+  ///
+  /// These serve as the baseline defaults. Each tool's limit can be overridden
+  /// remotely via the `limits.other_tools_limits` key in Remote Config.
+  /// Tool names defined here are guaranteed to appear in the trial service;
+  /// RC can add new tools not in this map.
+  final Map<String, int> toolLimits;
 }
 
 /// Singleton that exposes every OfficeCore subsystem.
@@ -244,6 +263,18 @@ class OfficeCore {
             'has_trial': config.defaultTrialDays > 0
           }
         ];
+
+        // Tool limits — inject code-defined tool names as baseline defaults
+        // RC can override individual values, but tool names come from code
+        // to avoid generic keys like "tool1", "tool2" in the RC JSON.
+        final limitsJson = json['platform']['limits'] as Map<String, dynamic>;
+        final existingRcMap = limitsJson['other_tools_limits'] as Map<String, dynamic>? ?? {};
+        final merged = <String, int>{...config.toolLimits};
+        for (final entry in existingRcMap.entries) {
+          merged[entry.key] = (entry.value as num).toInt();
+        }
+        limitsJson['other_tools_limits'] = merged;
+
         finalDefaults = OfficeRemoteConfig.fromJson(json);
       } catch (e) {
         logger.warning('Failed to inject top-level RC defaults: $e');
@@ -297,6 +328,7 @@ class OfficeCore {
       rc: rc,
       premium: config.premiumProvider,
       prefs: prefs,
+      toolLimits: config.toolLimits,
     );
 
     _instance = OfficeCore._(

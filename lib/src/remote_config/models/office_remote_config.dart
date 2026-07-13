@@ -259,12 +259,22 @@ class AdsUnits {
   }
 
   static const AdsUnits defaultProduction = AdsUnits(
-    appId: '',
-    banner: '',
-    interstitial: '',
-    native: '',
-    appOpen: '',
-    rewarded: '',
+    appId: 'ca-app-pub-3940256099942544~3347511713',
+    banner: 'ca-app-pub-3940256099942544/6300978111',
+    interstitial: 'ca-app-pub-3940256099942544/1033173712',
+    native: 'ca-app-pub-3940256099942544/2247696110',
+    appOpen: 'ca-app-pub-3940256099942544/9257395921',
+    rewarded: 'ca-app-pub-3940256099942544/5224354917',
+  );
+
+  /// Google test ad unit IDs — used as fallback when RC returns empty values.
+  static const AdsUnits test = AdsUnits(
+    appId: 'ca-app-pub-3940256099942544~3347511713',
+    banner: 'ca-app-pub-3940256099942544/6300978111',
+    interstitial: 'ca-app-pub-3940256099942544/1033173712',
+    native: 'ca-app-pub-3940256099942544/2247696110',
+    appOpen: 'ca-app-pub-3940256099942544/9257395921',
+    rewarded: 'ca-app-pub-3940256099942544/5224354917',
   );
 }
 

@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:google_mobile_ads/google_mobile_ads.dart';
 import 'package:office_core/office_core.dart';
 
 /// Demonstrates the Ads subsystem: banner ads, native ads, interstitial ads.

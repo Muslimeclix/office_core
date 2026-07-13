@@ -22,11 +22,18 @@ import '../util/logger.dart';
 /// - [deviceRegistryPath] — Firebase RTDB path under which device tokens
 ///   are registered.
 /// - [topics] — FCM topics to subscribe to.
+///
+/// All app-identification fields ([packageName], [appVersion], [buildNumber])
+/// are optional. When provided they are used directly; when omitted they are
+/// auto-detected via `PackageInfo.fromPlatform()`.
 class NotificationBackendConfig {
   const NotificationBackendConfig({
     required this.openedApiUrl,
     required this.deviceRegistryPath,
     this.topics = const ['all_users'],
+    this.packageName,
+    this.appVersion,
+    this.buildNumber,
   });
 
   /// Endpoint called when a user taps a notification. The controller POSTs
@@ -40,6 +47,18 @@ class NotificationBackendConfig {
 
   /// FCM topics to subscribe to on init.
   final List<String> topics;
+
+  /// Package name override (e.g. `com.mycompany.myapp`).
+  /// If null, auto-detected via `PackageInfo.fromPlatform()`.
+  final String? packageName;
+
+  /// App version override (e.g. `1.2.3`).
+  /// If null, auto-detected via `PackageInfo.fromPlatform()`.
+  final String? appVersion;
+
+  /// Build number override (e.g. `42`).
+  /// If null, auto-detected via `PackageInfo.fromPlatform()`.
+  final String? buildNumber;
 }
 
 /// Top-level background message handler. Must be a top-level function (not
@@ -231,7 +250,7 @@ class OfficeNotificationController extends ChangeNotifier {
       }
       
       final packageInfo = await PackageInfo.fromPlatform();
-      final pkg = packageInfo.packageName.replaceAll('.', '_');
+      final pkg = (_backend.packageName ?? packageInfo.packageName).replaceAll('.', '_');
       
       final topicsToSubscribe = <String>{
         ..._backend.topics,
@@ -348,9 +367,10 @@ class OfficeNotificationController extends ChangeNotifier {
       final data = {
         'token': token,
         'platform': Platform.isAndroid ? 'android' : 'ios',
-        'app_version': packageInfo.version,
-        'build_number': packageInfo.buildNumber,
-        'language': 'en',
+        'app_version': _backend.appVersion ?? packageInfo.version,
+        'build_number': _backend.buildNumber ?? packageInfo.buildNumber,
+        'package_name': _backend.packageName ?? packageInfo.packageName,
+        'language': Platform.localeName,
         'user_id': udid,
         'last_active': DateTime.now().toUtc().toIso8601String(),
       };
@@ -388,11 +408,12 @@ class OfficeNotificationController extends ChangeNotifier {
       }
 
       final packageInfo = await PackageInfo.fromPlatform();
+      final packageName = _backend.packageName ?? packageInfo.packageName;
       final dio = Dio();
 
       final formData = FormData.fromMap({
         'notification_uid': notificationUid,
-        'package_name': packageInfo.packageName,
+        'package_name': packageName,
         'user_token': _fcmToken,
         'status': 'opened',
         'notification_reached_at': reachedAt,
