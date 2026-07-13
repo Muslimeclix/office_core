@@ -89,7 +89,7 @@ Add to your `pubspec.yaml`:
 
 ```yaml
 dependencies:
-  office_core: ^1.0.0
+  office_core: ^1.0.1
 ```
 
 Then run:
