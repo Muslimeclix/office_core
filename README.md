@@ -89,7 +89,7 @@ Add to your `pubspec.yaml`:
 
 ```yaml
 dependencies:
-  office_core: ^1.0.1
+  office_core: ^1.1.1
 ```
 
 Then run:
@@ -153,7 +153,7 @@ Add to `pubspec.yaml`:
 
 ```yaml
 dependencies:
-  firebase_core: ^3.6.0
+  firebase_core: ^latest
 ```
 
 Add `firebase_options.dart` by running:
@@ -528,78 +528,89 @@ android {
 
 ## 🚀 Initialization
 
-Once the prerequisites above are done, initialize OfficeCore in `main()`:
+Once the prerequisites above are done, you have two options for initializing `OfficeCore`.
 
+### Option A: Initialize in Splash Screen (Recommended)
+
+Because `OfficeCore` fetches Remote Config and may show a UMP Consent dialog (which requires an active UI), **it is highly recommended to call `OfficeCore.initialize(...)` inside your `SplashController` or Splash screen** rather than in `main()`. This prevents the app from displaying a prolonged blank screen while waiting for network requests.
+
+**Important:** If you move initialization to your Splash screen, you must initialize `FirebaseCrashlytics` manually in your `main()` function if you want to capture extremely early startup crashes. (You can then disable Crashlytics inside `OfficeCoreConfig` or leave it enabled — it safely wraps the native instance).
+
+**1. `main.dart` (Fast boot):**
 ```dart
 import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
-import 'package:google_mobile_ads/google_mobile_ads.dart';
-import 'package:office_core/office_core.dart';
+import 'package:firebase_crashlytics/firebase_crashlytics.dart';
+import 'package:flutter/foundation.dart';
 
 import 'firebase_options.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-
-  // 1. Initialize Firebase
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
 
-  // 2. Initialize Google Mobile Ads SDK
-  await MobileAds.instance.initialize();
+  // Initialize Crashlytics natively to catch early errors
+  FlutterError.onError = FirebaseCrashlytics.instance.recordFlutterFatalError;
+  PlatformDispatcher.instance.onError = (error, stack) {
+    FirebaseCrashlytics.instance.recordError(error, stack, fatal: true);
+    return true;
+  };
 
-  // 3. Initialize OfficeCore
-  await OfficeCore.initialize(OfficeCoreConfig(
-    // Required: how does your app track premium status?
-    premiumProvider: ValueNotifierPremiumProvider(ValueNotifier(false)),
-
-    // Required: define your app's tool names and their free-tier limits.
-    // Each tool's value can be overridden remotely via `limits.other_tools_limits`.
-    toolLimits: {
-      'pdf_translate': 5,
-      'image_compress': 10,
-    },
-
-    // Required if enableNotifications is true
-    notificationBackend: NotificationBackendConfig(
-      openedApiUrl: 'https://your-api.com/notification/opened',
-      deviceRegistryPath: 'devices',
-      topics: ['all_users'],
-    ),
-
-    // Optional (defaults shown)
-    env: OfficeEnv.production,
-    enableAds: true,
-    enableCrashlytics: true,
-    enableAnalytics: true,
-    enableNotifications: true,
-    consentRequired: true,
-    defaultPlanType: 'weekly',
-    defaultPlanProductId: 'com.myapp.pro.weekly',
-    defaultTrialDays: 3,
-
-    // Optional: override any flat RC key per platform (null/empty → package default)
-    remoteConfigDefaults: {
-      'show_banner_android': false,
-      'oc_limits_global_conversion': 10,
-    },
-  ));
-
-  // 4. Wrap runApp with zone guard for crash capture
   runApp(MyApp());
 }
 ```
 
-For full crash capture, wrap `runApp` with `runZonedGuarded`:
+**2. `splash_controller.dart` (Heavy initialization):**
+```dart
+class SplashController extends GetxController {
+  @override
+  void onInit() {
+    super.onInit();
+    _initApp();
+  }
+
+  Future<void> _initApp() async {
+    await MobileAds.instance.initialize();
+
+    await OfficeCore.initialize(OfficeCoreConfig(
+      premiumProvider: ValueNotifierPremiumProvider(ValueNotifier(false)),
+      toolLimits: {'pdf_translate': 5, 'image_compress': 10},
+      env: OfficeEnv.production,
+      
+      // We set this to false because we handled Crashlytics in main() manually
+      enableCrashlytics: false, 
+      
+      enableAds: true,
+      enableAnalytics: true,
+      consentRequired: true,
+    ));
+
+    Get.offAll(() => HomeScreen());
+  }
+}
+```
+
+### Option B: Initialize in `main()`
+
+If you prefer to initialize everything in `main()`, you can still do so. As of `1.1.1`, the internal operations run concurrently, greatly reducing the blank screen duration.
 
 ```dart
-void main() async {
-  // ... init steps 1-3 above ...
+Future<void> main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+  await MobileAds.instance.initialize();
 
-  runZonedGuarded(() {
-    runApp(MyApp());
-  }, (error, stack) {
-    OfficeCore.crashlytics.record(error, stack);
-  });
+  // Initialize OfficeCore
+  await OfficeCore.initialize(OfficeCoreConfig(
+    premiumProvider: ValueNotifierPremiumProvider(ValueNotifier(false)),
+    toolLimits: {'pdf_translate': 5},
+    env: OfficeEnv.production,
+  ));
+
+  // Now you can safely use OfficeCore.crashlytics
+  FlutterError.onError = (details) => OfficeCore.crashlytics.record(details.exception, details.stack);
+
+  runApp(MyApp());
 }
 ```
 

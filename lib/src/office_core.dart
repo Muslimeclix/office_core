@@ -223,46 +223,10 @@ class OfficeCore {
     final connectivity = OfficeConnectivityService.instance;
     connectivity.initialize();
 
-    // 1. Consent Management
-    if (config.consentRequired) {
-      await _requestConsent(logger);
-    }
-
-    // 2. Unified User ID
-    String udid = '';
-    try {
-      udid = await FlutterUdid.udid;
-    } catch (e) {
-      logger.warning('Failed to get UDID: $e');
-    }
-
-    // 3. Initialize Remote Config
+    // Pre-instantiate synchronous controllers
     final rc = OfficeRemoteConfigService(logger: logger);
-
-    await rc.initialize(
-      userDefaults: config.remoteConfigDefaults,
-      toolLimits: config.toolLimits,
-      defaultPlanType: config.defaultPlanType,
-      defaultPlanProductId: config.defaultPlanProductId,
-      defaultTrialDays: config.defaultTrialDays,
-      fetchTimeout: config.remoteConfigFetchTimeout,
-    );
-    rc.watchConnectivity(connectivity);
-
-    // Initialize Crashlytics
     final crashlytics = OfficeCrashlytics(logger: logger);
-    if (config.enableCrashlytics) {
-      if (udid.isNotEmpty) await crashlytics.setUserIdentifier(udid);
-      await crashlytics.sendUnsentReports();
-    }
-
-    // Initialize Analytics
     final analytics = OfficeAnalyticsService(logger: logger);
-    if (config.enableAnalytics && udid.isNotEmpty) {
-      await analytics.setUserId(udid);
-    }
-
-    // Initialize Ads
     final ads = OfficeAdsController(
       rc: rc,
       premium: config.premiumProvider,
@@ -270,11 +234,6 @@ class OfficeCore {
       lifecycle: lifecycle,
       logger: logger,
     );
-    if (config.enableAds) {
-      ads.initialize();
-    }
-
-    // Initialize Notifications
     OfficeNotificationController? notifications;
     if (config.enableNotifications && config.notificationBackend != null) {
       notifications = OfficeNotificationController(
@@ -282,11 +241,42 @@ class OfficeCore {
         lifecycle: lifecycle,
         logger: logger,
       );
-      await notifications.initialize();
     }
 
+    // Run independent tasks concurrently to optimize startup time
+    final udidFuture = FlutterUdid.udid.catchError((dynamic e) {
+      logger.warning('Failed to get UDID: $e');
+      return '';
+    });
+
+    final prefsFuture = SharedPreferences.getInstance();
+
+    final rcFuture = rc.initialize(
+      userDefaults: config.remoteConfigDefaults,
+      toolLimits: config.toolLimits,
+      defaultPlanType: config.defaultPlanType,
+      defaultPlanProductId: config.defaultPlanProductId,
+      defaultTrialDays: config.defaultTrialDays,
+      fetchTimeout: config.remoteConfigFetchTimeout,
+    );
+
+    final consentFuture = config.consentRequired
+        ? _requestConsent(logger)
+        : Future<void>.value();
+
+    final results = await Future.wait([
+      udidFuture,
+      prefsFuture,
+      rcFuture,
+      consentFuture,
+    ]);
+
+    final udid = results[0] as String;
+    final prefs = results[1] as SharedPreferences;
+
+    rc.watchConnectivity(connectivity);
+
     // Initialize Trial
-    final prefs = await SharedPreferences.getInstance();
     final trial = OfficeTrialService(
       rc: rc,
       premium: config.premiumProvider,
@@ -294,6 +284,7 @@ class OfficeCore {
       toolLimits: config.toolLimits,
     );
 
+    // Set instance as soon as core objects are ready
     _instance = OfficeCore._(
       config,
       _Services(
@@ -308,6 +299,30 @@ class OfficeCore {
         logger: logger,
       ),
     );
+
+    // Complete remaining dependent tasks concurrently
+    final postInitFutures = <Future<void>>[];
+
+    if (config.enableCrashlytics) {
+      postInitFutures.add(Future(() async {
+        if (udid.isNotEmpty) await crashlytics.setUserIdentifier(udid);
+        await crashlytics.sendUnsentReports();
+      }));
+    }
+
+    if (config.enableAnalytics && udid.isNotEmpty) {
+      postInitFutures.add(analytics.setUserId(udid));
+    }
+
+    if (config.enableAds) {
+      ads.initialize();
+    }
+
+    if (notifications != null) {
+      postInitFutures.add(notifications.initialize());
+    }
+
+    await Future.wait(postInitFutures);
 
     logger.info('OfficeCore initialized (env: ${config.env.name})');
   }

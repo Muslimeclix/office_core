@@ -1,4 +1,9 @@
 
+## 1.1.1
+
+- **Drastically improved initialization time**: Converted sequential async initializations to concurrent operations using `Future.wait`. This fixes the issue of prolonged blank screens (15-20 seconds) when the package is initialized in `main()`.
+- **Early instantiation of `_instance`**: The core `OfficeCore` singleton is now populated immediately after resolving its fast dependencies. This ensures that `OfficeCore.crashlytics` and other subsystems do not throw `NullThrownError` while secondary subsystems (like Ads or Notifications) are still booting up.
+
 ## 1.1.0
 
 - **Remote Config rewritten to flat, per-platform keys** (e.g. `show_banner_android`, `free_reminder_limit_ios`). No more single `office_config_v1` JSON blob. Consumers can keep their existing RC JSON (parameter groups) unchanged.
